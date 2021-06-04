@@ -1,0 +1,157 @@
+
+// Considering that the points given by the HMI are the min limits rather than a rando point than could exist inside de boundaries of the parte, otherwise the search of the poins have to be optimazed.
+
+//=============================================================================================
+//  common - trigger, timer, ... etc.
+//=============================================================================================
+    
+    
+    #tonStepTimer(IN := #bStepTimer_IN,
+                  PT := #tStepTimer_PT);
+    #bStepTimer_IN := False;
+
+//=============================================================================================
+// Control Sequencer
+//=============================================================================================
+
+//Define Next Step
+#iActiveStep := #iNextStep;
+#Q_iActiveStepNo := #iActiveStep;
+
+IF #I_cmdHome THEN
+    #iActiveStep := 0;
+END_IF;
+
+IF #I_cmdAbort THEN
+    #iActiveStep := 2;
+END_IF;
+
+IF #I_cmdStart THEN
+    #iActiveStep := 10;
+END_IF;
+
+
+//=============================================================================================
+// sequencer / state machine
+//=============================================================================================
+
+CASE #iActiveStep OF
+        
+        //Home Position
+    0:
+        #Q_stsState := 0;
+        
+        #Q_stMotionPos.z := FALSE;
+        #Q_stMotionPos.x := #c_HomePosX;
+        #Q_stMotionPos.y := #c_HomePosY;
+        
+    2:
+        #Q_stsState := 2;
+        
+        #Q_Abort := TRUE;
+        
+        //Position search 
+    10:
+        #Q_stsState := 10;
+        
+        IF (#I_stsPointSelected[0] <> 0 AND #I_stsPointSelected[1] <> 0) THEN
+            #iNextStep := 12;
+        END_IF;
+        
+    12:
+        #Q_stsState := 12;
+        FOR #iLoopPart := 0 TO 5 BY 1 DO
+            IF #I_stsPointSelected[0] = #I_stParts[#iLoopPart].Parts.Xmin THEN
+                
+                FOR #jLoopPart := 0 TO 5 BY 1 DO
+                    IF #I_stsPointSelected[1] = #I_stParts[#iLoopPart].Parts.Ymin THEN
+                        #iNextStep := 14;
+                    ELSE
+                        #iNextStep := 0;
+                    END_IF;
+                END_FOR;
+                
+            ELSE
+                #iNextStep := 0;
+            END_IF;
+        END_FOR;
+        
+        //Starting point Xmin - Ymin
+    14:
+        #Q_stsState := 14;
+        
+        #Q_stMotionPos.z := FALSE;
+        #Q_stMotionPos.x := #I_stParts[#iLoopPart].Parts.Xmin;
+        #Q_stMotionPos.y := #I_stParts[#iLoopPart].Parts.Ymin;
+        #Q_stsPartSelected := #iLoopPart;
+        #bStepTimer_IN := true;
+        
+        IF #bMovDone THEN
+            #Q_stMotionPos.z := TRUE;
+            #iNextStep := 20;
+        END_IF;
+        
+        //Position Xmax - Ymin 
+    20:
+        #Q_stsState := 20;
+    
+        #Q_stMotionPos.x := #I_stParts[#iLoopPart].Parts.Xmax;
+        #bStepTimer_IN := true;
+        
+        IF #bMovDone THEN
+            #iNextStep := 22;
+        END_IF;
+        
+        //Position Xmax - Ymax 
+    22:
+        #Q_stsState := 22;
+        
+        #Q_stMotionPos.y := #I_stParts[#iLoopPart].Parts.Ymax;
+        #bStepTimer_IN := true;
+        
+        IF #bMovDone THEN
+            #iNextStep := 24;
+        END_IF;
+        
+        //Position Xmin - Ymax 
+    24:
+        #Q_stsState := 24;
+        
+        #Q_stMotionPos.x := #I_stParts[#iLoopPart].Parts.Xmin;
+        #bStepTimer_IN := true;
+        
+        IF #bMovDone THEN
+            #iNextStep := 26;
+        END_IF;
+        
+        //Last point Xmin - Ymax 
+    26:
+        #Q_stsState := 26;
+        
+        #Q_stMotionPos.y := #I_stParts[#iLoopPart].Parts.Ymin;
+        #bStepTimer_IN := true;
+        
+        IF #bMovDone THEN
+            #Q_stMotionPos.z:= FALSE;
+            #iNextStep := 0;
+        END_IF;
+        
+        
+END_CASE;
+
+
+//=============================================================================================
+// Commands to motion control 
+//=============================================================================================  
+
+IF #I_stMotionPos.x = #Q_stMotionPos.x AND #I_stMotionPos.y = #Q_stMotionPos.y THEN
+    #bMovDone := TRUE;
+    #bStepTimer_IN := false;
+    
+ELSIF
+    #tonStepTimer.Q THEN
+                                    ///////define what to do if the drive does not reach the postion
+    #bStepTimer_IN := false;
+END_IF;
+            
+        
